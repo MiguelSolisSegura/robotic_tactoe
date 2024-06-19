@@ -71,6 +71,27 @@ install(TARGETS
     DESTINATION lib/${PROJECT_NAME}
 )
 
+# Draw 'x' shape
+add_executable(draw_x
+    src/draw_x.cpp)
+target_include_directories(draw_x
+    PUBLIC include)
+ament_target_dependencies(draw_x
+    ament_cmake
+	rclcpp
+	rclcpp_action
+	moveit_core
+	moveit_ros_planning_interface
+	interactive_markers
+	moveit_ros_planning
+	control_msgs)
+
+install(TARGETS 
+	draw_x
+    DESTINATION lib/${PROJECT_NAME}
+)
+
+# Draw 'o' shape
 
 # Add launch files
 install(DIRECTORY 
