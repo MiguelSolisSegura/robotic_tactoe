@@ -16,6 +16,13 @@ find_package(interactive_markers REQUIRED)
 find_package(geometric_shapes REQUIRED)
 find_package(control_msgs REQUIRED)
 find_package(moveit_msgs REQUIRED)
+find_package(example_interfaces REQUIRED)
+find_package(geometry_msgs REQUIRED)
+
+# Add the service files
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "srv/MoveToCoordinates.srv"
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -29,6 +36,7 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
+ament_export_dependencies(rosidl_default_runtime)
 ament_package()
 
 # Test end effector space
@@ -92,6 +100,51 @@ install(TARGETS
 )
 
 # Draw 'o' shape
+add_executable(draw_o
+    src/draw_o.cpp)
+target_include_directories(draw_o
+    PUBLIC include)
+ament_target_dependencies(draw_o
+    ament_cmake
+	rclcpp
+	rclcpp_action
+	moveit_core
+	moveit_ros_planning_interface
+	interactive_markers
+	moveit_ros_planning
+	control_msgs)
+
+install(TARGETS 
+	draw_o
+    DESTINATION lib/${PROJECT_NAME}
+)
+
+# Move group service
+add_executable(move_group_service src/move_group_service.cpp)
+
+# Link libraries
+ament_target_dependencies(move_group_service
+  ament_cmake
+  rclcpp_action
+  interactive_markers
+  moveit_ros_planning
+  control_msgs
+  rclcpp
+  moveit_core
+  moveit_ros_planning_interface
+  example_interfaces
+  geometry_msgs
+)
+
+install(TARGETS
+  move_group_service
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+rosidl_get_typesupport_target(cpp_typesupport_target
+  ${PROJECT_NAME} rosidl_typesupport_cpp)
+
+target_link_libraries(move_group_service "${cpp_typesupport_target}")
 
 # Add launch files
 install(DIRECTORY 
