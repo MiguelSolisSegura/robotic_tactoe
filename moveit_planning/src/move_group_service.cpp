@@ -57,6 +57,18 @@ private:
                 RCLCPP_INFO(this->get_logger(), "Mode 2: Drawing O symbol.");
                 response->success = draw_o();
                 break;
+            case 3:
+                RCLCPP_INFO(this->get_logger(), "Mode 3: Drawing game board.");
+                response->success = draw_grid(0.03);
+                break;
+            case 4:
+                RCLCPP_INFO(this->get_logger(), "Mode 4: Drawing simple line.");
+                response->success = draw_line();
+                break;
+            case 5:
+                RCLCPP_INFO(this->get_logger(), "Mode 5: Erasing the screen.");
+                response->success = true;
+                break;
             default:
                 RCLCPP_ERROR(this->get_logger(), "Invalid mode: %ld", request->mode);
                 response->success = false;
@@ -174,6 +186,114 @@ private:
         }
 
         target_pose.position.z += 0.020;
+        waypoints.push_back(target_pose);
+
+        moveit_msgs::msg::RobotTrajectory trajectory;
+        const double jump_threshold = 0.0;
+        const double eef_step = 0.001;
+        double fraction = move_group_->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
+
+        move_group_->execute(trajectory);
+
+        return fraction > 0.95;
+    }
+
+    bool draw_line() {
+        RCLCPP_INFO(this->get_logger(), "Drawing a simple line");
+        geometry_msgs::msg::Pose target_pose = move_group_->getCurrentPose().pose;
+
+        std::vector<geometry_msgs::msg::Pose> waypoints;
+
+        target_pose.position.x -= 0.025;
+        waypoints.push_back(target_pose);
+
+        target_pose.position.z -= 0.020;
+        waypoints.push_back(target_pose);
+
+        target_pose.position.x += 0.050;
+        waypoints.push_back(target_pose);
+
+        target_pose.position.z += 0.020;
+        waypoints.push_back(target_pose);
+
+        moveit_msgs::msg::RobotTrajectory trajectory;
+        const double jump_threshold = 0.0;
+        const double eef_step = 0.001;
+        double fraction = move_group_->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
+
+        move_group_->execute(trajectory);
+
+        return fraction > 0.95;
+    }
+
+    bool draw_grid(double cell_size) {
+        RCLCPP_INFO(this->get_logger(), "Drawing tic-tac-toe grid");
+        geometry_msgs::msg::Pose target_pose = move_group_->getCurrentPose().pose;
+
+        double center_x = target_pose.position.x;
+        double center_y = target_pose.position.y;
+        double initial_z = target_pose.position.z;
+
+        std::vector<geometry_msgs::msg::Pose> waypoints;
+
+        // First vertical line
+        target_pose.position.x = center_x - cell_size / 2;
+        target_pose.position.y = center_y - 1.5 * cell_size;
+        target_pose.position.z = initial_z;
+        waypoints.push_back(target_pose);
+
+        target_pose.position.z = initial_z - 0.020;
+        waypoints.push_back(target_pose);
+
+        target_pose.position.y = center_y + 1.5 * cell_size;
+        waypoints.push_back(target_pose);
+
+        target_pose.position.z = initial_z;
+        waypoints.push_back(target_pose);
+
+        // Second vertical line
+        target_pose.position.x = center_x + cell_size / 2;
+        target_pose.position.y = center_y - 1.5 * cell_size;
+        target_pose.position.z = initial_z;
+        waypoints.push_back(target_pose);
+
+        target_pose.position.z = initial_z - 0.020;
+        waypoints.push_back(target_pose);
+
+        target_pose.position.y = center_y + 1.5 * cell_size;
+        waypoints.push_back(target_pose);
+
+        target_pose.position.z = initial_z;
+        waypoints.push_back(target_pose);
+
+        // First horizontal line
+        target_pose.position.x = center_x - 1.5 * cell_size;
+        target_pose.position.y = center_y - cell_size / 2;
+        target_pose.position.z = initial_z;
+        waypoints.push_back(target_pose);
+
+        target_pose.position.z = initial_z - 0.020;
+        waypoints.push_back(target_pose);
+
+        target_pose.position.x = center_x + 1.5 * cell_size;
+        waypoints.push_back(target_pose);
+
+        target_pose.position.z = initial_z;
+        waypoints.push_back(target_pose);
+
+        // Second horizontal line
+        target_pose.position.x = center_x - 1.5 * cell_size;
+        target_pose.position.y = center_y + cell_size / 2;
+        target_pose.position.z = initial_z;
+        waypoints.push_back(target_pose);
+
+        target_pose.position.z = initial_z - 0.020;
+        waypoints.push_back(target_pose);
+
+        target_pose.position.x = center_x + 1.5 * cell_size;
+        waypoints.push_back(target_pose);
+
+        target_pose.position.z = initial_z;
         waypoints.push_back(target_pose);
 
         moveit_msgs::msg::RobotTrajectory trajectory;
