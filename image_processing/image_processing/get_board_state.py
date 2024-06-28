@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
+from moveit_planning.srv import GetBoardState
 
 class ImageProcessor(Node):
     def __init__(self):
@@ -17,7 +18,7 @@ class ImageProcessor(Node):
         
         self.subscription = self.create_subscription(
             Image,
-            '/demo_cam/camera1/image_raw', # SIMULATION
+            '/demo_cam/camera1/image_raw',
             self.image_callback,
             10,
             callback_group=self.callback_group)
@@ -26,6 +27,9 @@ class ImageProcessor(Node):
         
         self.bridge = CvBridge()
 
+        self.board_state = [0] * 9
+        self.service = self.create_service(GetBoardState, 'get_board_state', self.get_board_state_callback)
+        
     def image_callback(self, msg):
         self.get_logger().info('Received image')
         
@@ -52,7 +56,7 @@ class ImageProcessor(Node):
         # Fill everything outside the ROI with black
         masked_image[mask == 0] = 0
 
-        segmented_image, num_labels, labels_im = self.image_segmentation(masked_image)
+        segmented_image, num_labels, labels_im, grid_bbox = self.image_segmentation(masked_image)
         
         processed_image_msg = self.bridge.cv2_to_imgmsg(segmented_image, encoding='bgr8')
         
@@ -77,8 +81,20 @@ class ImageProcessor(Node):
         # Create an output image with colored segments
         output_image = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
 
+        if num_labels <= 1:
+            # No components found
+            return output_image, num_labels, labels_im, None
+
         # Find the largest component
         largest_component = 1 + np.argmax(np.bincount(labels_im.flat)[1:])
+
+        # Get the bounding box of the largest component (grid)
+        grid_mask = (labels_im == largest_component).astype(np.uint8) * 255
+        x, y, w, h = cv2.boundingRect(grid_mask)
+        grid_bbox = (x, y, w, h)
+
+        # Initialize board state
+        board_state = [0] * 9
 
         # Color the components
         cross_n = 0
@@ -91,6 +107,7 @@ class ImageProcessor(Node):
                 component_mask = (labels_im == label).astype(np.uint8) * 255
                 # Calculate geometric middle
                 x, y, w, h = cv2.boundingRect(component_mask)
+                middle_x = x + w // 2
                 middle_y = y + h // 2
                 start_x = x + w // 3
                 end_x = x + 2 * w // 3
@@ -100,9 +117,11 @@ class ImageProcessor(Node):
                 if np.count_nonzero(middle_line) == 0:
                     output_image[labels_im == label] = [0, 255, 0]  # Green color for circles
                     circle_n += 1
+                    self.update_board_state(board_state, middle_x, middle_y, grid_bbox, 2)  # O
                 else:
                     output_image[labels_im == label] = [0, 0, 255]  # Red color for crosses
                     cross_n += 1
+                    self.update_board_state(board_state, middle_x, middle_y, grid_bbox, 1)  # X
 
         # Add text annotations
         board_present = num_labels > 1
@@ -113,7 +132,35 @@ class ImageProcessor(Node):
         cv2.putText(output_image, cross_text, (10, 160), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 2, cv2.LINE_AA)
         cv2.putText(output_image, circle_text, (10, 260), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 2, cv2.LINE_AA)
 
-        return output_image, num_labels, labels_im
+        self.board_state = board_state
+        return output_image, num_labels, labels_im, grid_bbox
+
+    def update_board_state(self, board_state, x, y, grid_bbox, value):
+        grid_x, grid_y, grid_w, grid_h = grid_bbox
+        cell_width = grid_w // 3
+        cell_height = grid_h // 3
+
+        # Determine cell position relative to grid bounding box
+        col = (x - grid_x) // cell_width
+        row = (y - grid_y) // cell_height
+
+        if 0 <= row < 3 and 0 <= col < 3:
+            board_state[row * 3 + col] = value
+
+    def get_board_state_callback(self, request, response):
+        response.board_state = self.board_state
+        response.board_ascii = self.generate_ascii_board()
+        return response
+    
+    def generate_ascii_board(self):
+        symbols = [' ', 'X', 'O']
+        ascii_board = ""
+        for i in range(3):
+            row = "|".join([symbols[self.board_state[i * 3 + j]] for j in range(3)])
+            ascii_board += row + "\n"
+            if i < 2:
+                ascii_board += "-----\n"
+        return ascii_board
 
 def main(args=None):
     rclpy.init(args=args)

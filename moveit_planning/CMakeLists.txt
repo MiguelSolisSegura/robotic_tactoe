@@ -25,6 +25,7 @@ find_package(builtin_interfaces REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/MoveToCoordinates.srv"
   "srv/GetBoardState.srv"
+  "srv/ComputeBestMove.srv"
 )
 
 if(BUILD_TESTING)

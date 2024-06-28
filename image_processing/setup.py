@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'get_board_state = image_processing.get_board_state:main',
+            'compute_best_move = image_processing.compute_best_move:main',
         ],
     },
 )
