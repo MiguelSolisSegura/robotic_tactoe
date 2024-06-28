@@ -10,9 +10,9 @@ def generate_launch_description():
     moveit_config = MoveItConfigsBuilder("mycobot_280", package_name="moveit_config_real").to_moveit_configs()
 
     moveit_cpp_node = Node(
-        name="move_group_service",
+        name="move_group_service_real",
         package="moveit_planning",
-        executable="move_group_service",
+        executable="move_group_service_real",
         output="screen",
         parameters=[
             moveit_config.robot_description,

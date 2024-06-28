@@ -24,6 +24,7 @@ find_package(builtin_interfaces REQUIRED)
 # Add the service files
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/MoveToCoordinates.srv"
+  "srv/GetBoardState.srv"
 )
 
 if(BUILD_TESTING)
