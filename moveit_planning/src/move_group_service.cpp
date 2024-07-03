@@ -29,6 +29,16 @@ public:
             "move_to_coordinates",
             std::bind(&MoveGroupService::handle_move_to_coordinates, this, std::placeholders::_1, std::placeholders::_2));
 
+        // Parameter for controlling wait time at intermediate steps
+        this->declare_parameter<int>("wait_time", 1.0);
+        this->get_parameter("wait_time", this->wait_time);
+
+        // Parameters for controlling end effector orientation
+        this->declare_parameter<double>("orientation_x", 0.0);
+        this->declare_parameter<double>("orientation_y", 0.0);
+        this->declare_parameter<double>("orientation_z", 0.0);
+        this->declare_parameter<double>("orientation_w", 1.0);
+
         RCLCPP_INFO(this->get_logger(), "Service server ready.");
     }
 
@@ -38,8 +48,8 @@ private:
         // Initialize the robot to the starting state
         initialize_robot();
 
-        RCLCPP_INFO(this->get_logger(), "Sleeping for 10 seconds at playing position.");
-        std::this_thread::sleep_for(std::chrono::seconds(10));
+        RCLCPP_INFO(this->get_logger(), "Sleeping for %d seconds at playing position.", this->wait_time);
+        std::this_thread::sleep_for(std::chrono::seconds(this->wait_time));
         RCLCPP_INFO(this->get_logger(), "Continuing.");
 
         // Move to the specified target position
@@ -48,8 +58,8 @@ private:
                 response->success = false;
                 return;
             }
-            RCLCPP_INFO(this->get_logger(), "Sleeping for 10 seconds at coordinates location.");
-            std::this_thread::sleep_for(std::chrono::seconds(10));
+            RCLCPP_INFO(this->get_logger(), "Sleeping for %d seconds at coordinates location.", this->wait_time);
+            std::this_thread::sleep_for(std::chrono::seconds(this->wait_time));
             RCLCPP_INFO(this->get_logger(), "Continuing.");
         }
 
@@ -86,8 +96,8 @@ private:
         }
 
         // Return to the initial position
-        RCLCPP_INFO(this->get_logger(), "Sleeping for 10 seconds before finishing.");
-        std::this_thread::sleep_for(std::chrono::seconds(10));
+        RCLCPP_INFO(this->get_logger(), "Sleeping for %d seconds before finishing.", this->wait_time);
+        std::this_thread::sleep_for(std::chrono::seconds(this->wait_time));
         RCLCPP_INFO(this->get_logger(), "Continuing.");
         move_to_play_position();
     }
@@ -105,10 +115,10 @@ private:
 
     bool move_to_target(double x, double y, double z) {
         geometry_msgs::msg::Pose target_pose;
-        target_pose.orientation.x = 0.00;
-        target_pose.orientation.y = 1.00;
-        target_pose.orientation.z = 0.00;
-        target_pose.orientation.w = 0.00;
+        this->get_parameter("orientation_x", target_pose.orientation.x);
+        this->get_parameter("orientation_y", target_pose.orientation.y);
+        this->get_parameter("orientation_z", target_pose.orientation.z);
+        this->get_parameter("orientation_w", target_pose.orientation.w);
         target_pose.position.x = x;
         target_pose.position.y = y;
         target_pose.position.z = z;
@@ -170,28 +180,28 @@ private:
         std::vector<geometry_msgs::msg::Pose> waypoints;
         waypoints.push_back(target_pose);
 
-        target_pose.position.x -= 0.025;
-        target_pose.position.y -= 0.025;
+        target_pose.position.x -= this->symbol_size / 2;
+        target_pose.position.y -= this->symbol_size / 2;
         waypoints.push_back(target_pose);
 
         target_pose.position.z -= 0.020;
         waypoints.push_back(target_pose);
 
-        target_pose.position.x += 0.050;
-        target_pose.position.y += 0.050;
+        target_pose.position.x += this->symbol_size;
+        target_pose.position.y += this->symbol_size;
         waypoints.push_back(target_pose);
 
         target_pose.position.z += 0.020;
         waypoints.push_back(target_pose);
 
-        target_pose.position.x -= 0.050;
+        target_pose.position.x -= this->symbol_size;
         waypoints.push_back(target_pose);
 
         target_pose.position.z -= 0.020;
         waypoints.push_back(target_pose);
 
-        target_pose.position.x += 0.050;
-        target_pose.position.y -= 0.050;
+        target_pose.position.x += this->symbol_size;
+        target_pose.position.y -= this->symbol_size;
         waypoints.push_back(target_pose);
 
         target_pose.position.z += 0.020;
@@ -214,7 +224,7 @@ private:
         std::vector<geometry_msgs::msg::Pose> waypoints;
         waypoints.push_back(target_pose);
 
-        double radius = 0.025;
+        double radius = this->symbol_size / 2;
         double centerX = target_pose.position.x;
         double centerY = target_pose.position.y;
         int num_points = 64;
@@ -357,6 +367,9 @@ private:
     std::string planning_group_;
     rclcpp::Node::SharedPtr move_group_node_;
     rclcpp::executors::SingleThreadedExecutor executor_;
+    float symbol_size = 0.030;
+    float grid_size = 0.135;
+    int wait_time;
 };
 
 int main(int argc, char **argv) {

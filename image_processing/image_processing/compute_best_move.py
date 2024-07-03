@@ -9,15 +9,18 @@ class BestMoveCalculator(Node):
     def __init__(self):
         super().__init__('best_move_calculator')
         self.srv = self.create_service(ComputeBestMove, 'compute_best_move', self.compute_best_move_callback)
-        self.get_logger().info('Compute moves server started')
+        self.get_logger().info('Best move server started.')
 
     def compute_best_move_callback(self, request, response):
+        self.get_logger().info('Received request to compute the best next move.')
         board = request.board_state
         best_move, player = self.find_best_move(board)
         game_status = self.evaluate_game_status(board, best_move, player)
         response.best_move = best_move
         response.player = player
         response.game_status = game_status
+        self.get_logger().info(f'The best next move is {best_move} for player {player}.')
+        self.get_logger().info(f'Current game status is: {game_status}.')
         return response
 
     def is_moves_left(self, board):

@@ -20,12 +20,15 @@ find_package(example_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(builtin_interfaces REQUIRED)
+find_package(std_srvs REQUIRED)
+
 
 # Add the service files
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/MoveToCoordinates.srv"
   "srv/GetBoardState.srv"
   "srv/ComputeBestMove.srv"
+  "srv/MakeMove.srv"
 )
 
 if(BUILD_TESTING)
@@ -42,86 +45,6 @@ endif()
 
 ament_export_dependencies(rosidl_default_runtime)
 ament_package()
-
-# Test end effector space
-add_executable(test_trajectory
-    src/test_trajectory.cpp)
-target_include_directories(test_trajectory
-    PUBLIC include)
-ament_target_dependencies(test_trajectory
-    ament_cmake
-	rclcpp
-	rclcpp_action
-	moveit_core
-	moveit_ros_planning_interface
-	interactive_markers
-	moveit_ros_planning
-	control_msgs)
-
-install(TARGETS 
-	test_trajectory
-    DESTINATION lib/${PROJECT_NAME}
-)
-
-# Test joint space
-add_executable(test_joint
-    src/test_joint.cpp)
-target_include_directories(test_joint
-    PUBLIC include)
-ament_target_dependencies(test_joint
-    ament_cmake
-	rclcpp
-	rclcpp_action
-	moveit_core
-	moveit_ros_planning_interface
-	interactive_markers
-	moveit_ros_planning
-	control_msgs)
-
-install(TARGETS 
-	test_joint
-    DESTINATION lib/${PROJECT_NAME}
-)
-
-# Draw 'x' shape
-add_executable(draw_x
-    src/draw_x.cpp)
-target_include_directories(draw_x
-    PUBLIC include)
-ament_target_dependencies(draw_x
-    ament_cmake
-	rclcpp
-	rclcpp_action
-	moveit_core
-	moveit_ros_planning_interface
-	interactive_markers
-	moveit_ros_planning
-	control_msgs)
-
-install(TARGETS 
-	draw_x
-    DESTINATION lib/${PROJECT_NAME}
-)
-
-# Draw 'o' shape
-add_executable(draw_o
-    src/draw_o.cpp)
-target_include_directories(draw_o
-    PUBLIC include)
-ament_target_dependencies(draw_o
-    ament_cmake
-	rclcpp
-	rclcpp_action
-	moveit_core
-	moveit_ros_planning_interface
-	interactive_markers
-	moveit_ros_planning
-	control_msgs)
-
-install(TARGETS 
-	draw_o
-    DESTINATION lib/${PROJECT_NAME}
-)
 
 # Move group service
 add_executable(move_group_service src/move_group_service.cpp)
@@ -145,13 +68,38 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+# tictactoe main node
+add_executable(tic_tac_toe src/tic_tac_toe.cpp)
+
+ament_target_dependencies(tic_tac_toe
+  ament_cmake
+  rclcpp_action
+  interactive_markers
+  moveit_ros_planning
+  control_msgs
+  rclcpp
+  moveit_core
+  moveit_ros_planning_interface
+  example_interfaces
+  geometry_msgs
+  std_srvs
+)
+
+install(TARGETS
+  tic_tac_toe
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+# Interfaces definiton
 rosidl_get_typesupport_target(cpp_typesupport_target
   ${PROJECT_NAME} rosidl_typesupport_cpp)
 
 target_link_libraries(move_group_service "${cpp_typesupport_target}")
+target_link_libraries(tic_tac_toe "${cpp_typesupport_target}")
 
 # Add launch files
 install(DIRECTORY 
 	launch
+	config
     DESTINATION share/${PROJECT_NAME}
 )

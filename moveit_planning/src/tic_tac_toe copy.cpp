@@ -5,26 +5,18 @@
 #include "std_srvs/srv/trigger.hpp"
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <fstream>
-#include <thread>
-#include <chrono>
-
-using namespace std::chrono_literals;
-using namespace std::placeholders;
 
 class TicTacToeOrchestrator : public rclcpp::Node {
 public:
     TicTacToeOrchestrator() : Node("tictactoe_orchestrator") {
-        // Create a callback group
-        callback_group_ = this->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
-
         // Initialize clients
-        get_board_state_client_ = this->create_client<moveit_planning::srv::GetBoardState>("get_board_state", rmw_qos_profile_services_default, callback_group_);
+        get_board_state_client_ = this->create_client<moveit_planning::srv::GetBoardState>("get_board_state");
         compute_best_move_client_ = this->create_client<moveit_planning::srv::ComputeBestMove>("compute_best_move");
         move_to_coordinates_client_ = this->create_client<moveit_planning::srv::MoveToCoordinates>("move_to_coordinates");
-        
+
         // Initialize services
-        ask_for_next_move_service_ = this->create_service<std_srvs::srv::Trigger>("ask_for_next_move", std::bind(&TicTacToeOrchestrator::ask_for_next_move_callback, this, _1, _2), rmw_qos_profile_services_default, callback_group_);
-        start_new_game_service_ = this->create_service<std_srvs::srv::Trigger>("start_new_game", std::bind(&TicTacToeOrchestrator::start_new_game_callback, this, _1, _2));
+        ask_for_next_move_service_ = this->create_service<std_srvs::srv::Trigger>("ask_for_next_move", std::bind(&TicTacToeOrchestrator::ask_for_next_move_callback, this, std::placeholders::_1, std::placeholders::_2));
+        start_new_game_service_ = this->create_service<std_srvs::srv::Trigger>("start_new_game", std::bind(&TicTacToeOrchestrator::start_new_game_callback, this, std::placeholders::_1, std::placeholders::_2));
 
         // Load mapping from sim_config.txt
         load_coordinates_mapping();
@@ -37,7 +29,6 @@ private:
     rclcpp::Client<moveit_planning::srv::MoveToCoordinates>::SharedPtr move_to_coordinates_client_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr ask_for_next_move_service_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr start_new_game_service_;
-    rclcpp::CallbackGroup::SharedPtr callback_group_;
     std::map<int, std::array<double, 3>> coordinates_mapping_;
 
     void load_coordinates_mapping() {
@@ -60,40 +51,10 @@ private:
     }
 
     void ask_for_next_move_callback(const std::shared_ptr<std_srvs::srv::Trigger::Request> request, std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-        // Avoid unused parameter warning
-        (void)request;  
-        RCLCPP_INFO(this->get_logger(), "Received request to determine and perform the next move.");
-        // Create a request for /get_board_state service
-        auto get_board_state_request = std::make_shared<moveit_planning::srv::GetBoardState::Request>();
-        // Create a future result for the response and send request
-        auto result_future = get_board_state_client_->async_send_request(
-                get_board_state_request, std::bind(&TicTacToeOrchestrator::get_board_state_response, this, std::placeholders::_1));
-
-        auto status = result_future.wait_for(10s);
-        if (status == std::future_status::ready) {
-            RCLCPP_INFO(this->get_logger(), "Board state: COMPLETED.");
-            response->success = true;
-            response->message = result_future.get()->board_ascii;
-        } else {
-            RCLCPP_INFO(this->get_logger(), "Board state: FAILED.");
-        }
-    }
-
-    void get_board_state_response(rclcpp::Client<moveit_planning::srv::GetBoardState>::SharedFuture future) {
-        auto status = future.wait_for(1s);
-        if (status == std::future_status::ready) {
-            RCLCPP_INFO(this->get_logger(), "Received board state.");
-            auto response = future.get();
-            RCLCPP_INFO(this->get_logger(), "Response is:\n%s", response->board_ascii.c_str());
-        } else {
-            RCLCPP_INFO(this->get_logger(), "Service is still in progress.");
-        }
-    }
-
-    /*
-    void ask_for_next_move_callback(const std::shared_ptr<std_srvs::srv::Trigger::Request> request, std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
         (void)request;  // to avoid unused parameter warning
+
         RCLCPP_INFO(this->get_logger(), "Received request to determine and perform the next move.");
+
         auto get_board_state_request = std::make_shared<moveit_planning::srv::GetBoardState::Request>();
         get_board_state_client_->async_send_request(get_board_state_request,
             [this, response](rclcpp::Client<moveit_planning::srv::GetBoardState>::SharedFuture future) {
@@ -108,7 +69,6 @@ private:
                 this->handle_board_state_response(board_state_response->board_state, response);
             }
         );
-        std::this_thread::sleep_for(std::chrono::seconds(30));
     }
 
     void handle_board_state_response(const std::array<int32_t, 9>& board_state, std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
@@ -164,7 +124,7 @@ private:
                 }
             }
         );
-    } */
+    }
 
     void start_new_game_callback(const std::shared_ptr<std_srvs::srv::Trigger::Request> request, std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
         (void)request;  // to avoid unused parameter warning
@@ -197,12 +157,7 @@ private:
 int main(int argc, char **argv) {
     rclcpp::init(argc, argv);
     auto node = std::make_shared<TicTacToeOrchestrator>();
-    // Create a multi-threaded executor
-    rclcpp::executors::MultiThreadedExecutor executor;
-    // Add the node to the executor
-    executor.add_node(node);
-    executor.spin();
-    // Shutdown when spinning is finished
+    rclcpp::spin(node);
     rclcpp::shutdown();
     return 0;
 }

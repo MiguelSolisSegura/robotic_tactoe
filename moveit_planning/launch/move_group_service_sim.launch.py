@@ -4,11 +4,27 @@ from launch_ros.actions import Node
 from launch.actions import ExecuteProcess
 from ament_index_python.packages import get_package_share_directory
 from moveit_configs_utils import MoveItConfigsBuilder
+from moveit_configs_utils.launches import generate_move_group_launch
+from moveit_configs_utils.launches import generate_moveit_rviz_launch
 
 
 def generate_launch_description():
     moveit_config = MoveItConfigsBuilder("firefighter", package_name="moveit_config").to_moveit_configs()
 
+    # Move group node
+    move_group_node = Node(
+        package="moveit_ros_move_group",
+        executable="move_group",
+        output="screen",
+        parameters=[
+            moveit_config.to_dict(),
+            {"trajectory_execution.allowed_execution_duration_scaling": 2.0,},
+            {"publish_robot_description_semantic": True},
+            {"use_sim_time": True},
+        ],
+    )
+    
+    # Arm move ervice
     moveit_cpp_node = Node(
         name="move_group_service",
         package="moveit_planning",
@@ -22,6 +38,11 @@ def generate_launch_description():
         ],
     )
 
+    # RViz interface
+    rviz_node = generate_moveit_rviz_launch(moveit_config)
+
     return LaunchDescription(
-        [moveit_cpp_node]
+        [move_group_node, moveit_cpp_node, rviz_node]
     )
+
+

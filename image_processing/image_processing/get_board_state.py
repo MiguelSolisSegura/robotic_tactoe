@@ -29,9 +29,10 @@ class ImageProcessor(Node):
 
         self.board_state = [0] * 9
         self.service = self.create_service(GetBoardState, 'get_board_state', self.get_board_state_callback)
+        self.get_logger().info('Image processing started.')
         
     def image_callback(self, msg):
-        self.get_logger().info('Received image')
+        
         
         try:
             # Convert the ROS image message to a BGR image
@@ -61,7 +62,7 @@ class ImageProcessor(Node):
         processed_image_msg = self.bridge.cv2_to_imgmsg(segmented_image, encoding='bgr8')
         
         self.publisher_.publish(processed_image_msg)
-        self.get_logger().info('Published processed image')
+        
 
     def image_segmentation(self, img, dilate_iterations=1):
         # Ensure the input image is a numpy array
@@ -148,8 +149,10 @@ class ImageProcessor(Node):
             board_state[row * 3 + col] = value
 
     def get_board_state_callback(self, request, response):
+        self.get_logger().info('Received request for board state.')
         response.board_state = self.board_state
         response.board_ascii = self.generate_ascii_board()
+        print(response.board_ascii)
         return response
     
     def generate_ascii_board(self):
