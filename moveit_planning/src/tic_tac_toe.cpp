@@ -5,8 +5,10 @@
 #include "std_srvs/srv/trigger.hpp"
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <fstream>
+#include <string>
 #include <thread>
 #include <chrono>
+#include <vector>
 
 using namespace std::chrono_literals;
 using namespace std::placeholders;
@@ -19,8 +21,8 @@ public:
 
         // Initialize clients
         get_board_state_client_ = this->create_client<moveit_planning::srv::GetBoardState>("get_board_state", rmw_qos_profile_services_default, callback_group_);
-        compute_best_move_client_ = this->create_client<moveit_planning::srv::ComputeBestMove>("compute_best_move");
-        move_to_coordinates_client_ = this->create_client<moveit_planning::srv::MoveToCoordinates>("move_to_coordinates");
+        compute_best_move_client_ = this->create_client<moveit_planning::srv::ComputeBestMove>("compute_best_move", rmw_qos_profile_services_default, callback_group_);
+        move_to_coordinates_client_ = this->create_client<moveit_planning::srv::MoveToCoordinates>("move_to_coordinates", rmw_qos_profile_services_default, callback_group_);
         
         // Initialize services
         ask_for_next_move_service_ = this->create_service<std_srvs::srv::Trigger>("ask_for_next_move", std::bind(&TicTacToeOrchestrator::ask_for_next_move_callback, this, _1, _2), rmw_qos_profile_services_default, callback_group_);
@@ -66,105 +68,82 @@ private:
         // Create a request for /get_board_state service
         auto get_board_state_request = std::make_shared<moveit_planning::srv::GetBoardState::Request>();
         // Create a future result for the response and send request
-        auto result_future = get_board_state_client_->async_send_request(
-                get_board_state_request, std::bind(&TicTacToeOrchestrator::get_board_state_response, this, std::placeholders::_1));
-
-        auto status = result_future.wait_for(10s);
-        if (status == std::future_status::ready) {
-            RCLCPP_INFO(this->get_logger(), "Board state: COMPLETED.");
-            response->success = true;
-            response->message = result_future.get()->board_ascii;
-        } else {
-            RCLCPP_INFO(this->get_logger(), "Board state: FAILED.");
-        }
-    }
-
-    void get_board_state_response(rclcpp::Client<moveit_planning::srv::GetBoardState>::SharedFuture future) {
-        auto status = future.wait_for(1s);
+        auto get_board_state_future = get_board_state_client_->async_send_request(get_board_state_request);
+        // Handle response
+        auto status = get_board_state_future.wait_for(3s);
+        std::array<int, 9> board_state;
         if (status == std::future_status::ready) {
             RCLCPP_INFO(this->get_logger(), "Received board state.");
-            auto response = future.get();
-            RCLCPP_INFO(this->get_logger(), "Response is:\n%s", response->board_ascii.c_str());
+            auto get_board_state_response = get_board_state_future.get();
+            RCLCPP_INFO(this->get_logger(), "Response is:\n%s", get_board_state_response->board_ascii.c_str());
+            board_state = get_board_state_response->board_state;
         } else {
-            RCLCPP_INFO(this->get_logger(), "Service is still in progress.");
+            RCLCPP_ERROR(this->get_logger(), "Failed to get board state.");
+            response->success = false;
+            response->message = "Failed to get board state.";
+            return;
         }
-    }
 
-    /*
-    void ask_for_next_move_callback(const std::shared_ptr<std_srvs::srv::Trigger::Request> request, std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-        (void)request;  // to avoid unused parameter warning
-        RCLCPP_INFO(this->get_logger(), "Received request to determine and perform the next move.");
-        auto get_board_state_request = std::make_shared<moveit_planning::srv::GetBoardState::Request>();
-        get_board_state_client_->async_send_request(get_board_state_request,
-            [this, response](rclcpp::Client<moveit_planning::srv::GetBoardState>::SharedFuture future) {
-                auto board_state_response = future.get();
-                if (board_state_response == nullptr) {
-                    RCLCPP_ERROR(this->get_logger(), "Failed to get board state.");
-                    response->success = false;
-                    response->message = "Failed to get board state";
-                    return;
-                }
-                RCLCPP_INFO(this->get_logger(), "Received board state.");
-                this->handle_board_state_response(board_state_response->board_state, response);
-            }
-        );
-        std::this_thread::sleep_for(std::chrono::seconds(30));
-    }
-
-    void handle_board_state_response(const std::array<int32_t, 9>& board_state, std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-        RCLCPP_INFO(this->get_logger(), "Handling board state response.");
+        // Create a request for /compute_best_move service
         auto compute_best_move_request = std::make_shared<moveit_planning::srv::ComputeBestMove::Request>();
         compute_best_move_request->board_state = board_state;
+        // Send request
+        auto compute_best_move_future = compute_best_move_client_->async_send_request(compute_best_move_request);
+        // Handle response
+        status = compute_best_move_future.wait_for(3s);
+        int best_move, player;
+        std::string game_status;
+        if (status == std::future_status::ready) {
+            RCLCPP_INFO(this->get_logger(), "Received best move.");
+            auto compute_best_move_response = compute_best_move_future.get();
+            best_move = compute_best_move_response->best_move;
+            player = compute_best_move_response->player;
+            game_status = compute_best_move_response->game_status;
+            RCLCPP_INFO(this->get_logger(), "Best move is: %d", best_move);
+            RCLCPP_INFO(this->get_logger(), "Current player: %d", player);
+            RCLCPP_INFO(this->get_logger(), "Game status: %s", game_status.c_str());
+        } else {
+            RCLCPP_ERROR(this->get_logger(), "Failed to get best move.");
+            response->success = false;
+            response->message = "Failed to get best move.";
+            return;
+        }
 
-        compute_best_move_client_->async_send_request(compute_best_move_request,
-            [this, response, board_state](rclcpp::Client<moveit_planning::srv::ComputeBestMove>::SharedFuture future) {
-                auto best_move_response = future.get();
-                if (best_move_response == nullptr) {
-                    RCLCPP_ERROR(this->get_logger(), "Failed to compute best move.");
-                    response->success = false;
-                    response->message = "Failed to compute best move";
-                    return;
-                }
-                RCLCPP_INFO(this->get_logger(), "Best move: %d, Player: %d, Game status: %s",
-                            best_move_response->best_move, best_move_response->player, best_move_response->game_status.c_str());
-
-                if (best_move_response->game_status != "Game in progress") {
-                    response->success = true;
-                    response->message = best_move_response->game_status;
-                    return;
-                }
-
-                auto coordinates = this->coordinates_mapping_[best_move_response->best_move];
-                RCLCPP_INFO(this->get_logger(), "Coordinates for move: x=%f, y=%f, z=%f",
-                            coordinates[0], coordinates[1], coordinates[2]);
-                this->handle_move_to_coordinates(coordinates, best_move_response->player, response);
-            }
-        );
-    }
-
-    void handle_move_to_coordinates(const std::array<double, 3>& coordinates, int player, std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-        RCLCPP_INFO(this->get_logger(), "Moving to coordinates for player %d.", player);
+        // Create a request for /move_to_coordinates service
         auto move_to_coordinates_request = std::make_shared<moveit_planning::srv::MoveToCoordinates::Request>();
+        auto coordinates = this->coordinates_mapping_[best_move];
         move_to_coordinates_request->x = coordinates[0];
         move_to_coordinates_request->y = coordinates[1];
         move_to_coordinates_request->z = coordinates[2];
         move_to_coordinates_request->mode = player;
-
-        move_to_coordinates_client_->async_send_request(move_to_coordinates_request,
-            [this, response](rclcpp::Client<moveit_planning::srv::MoveToCoordinates>::SharedFuture future) {
-                auto move_to_coordinates_response = future.get();
-                if (move_to_coordinates_response != nullptr && move_to_coordinates_response->success) {
-                    RCLCPP_INFO(this->get_logger(), "Move performed successfully.");
-                    response->success = true;
-                    response->message = "Move performed successfully";
-                } else {
-                    RCLCPP_ERROR(this->get_logger(), "Failed to perform move.");
-                    response->success = false;
-                    response->message = "Failed to perform move";
-                }
-            }
-        );
-    } */
+        RCLCPP_INFO(this->get_logger(), "Moving to coordinates X: %.3f, Y:%.3f, Z:%.3f.", coordinates[0], coordinates[1], coordinates[2]);
+        // Send request
+        auto move_to_coordinates_future = move_to_coordinates_client_->async_send_request(move_to_coordinates_request);
+        // Handle response
+        status = move_to_coordinates_future.wait_for(45s);
+        bool service_success;
+        if (status == std::future_status::ready) {
+            RCLCPP_INFO(this->get_logger(), "Received arm move response.");
+            auto move_to_coordinates_response = move_to_coordinates_future.get();
+            service_success = move_to_coordinates_response->success;
+        } else {
+            RCLCPP_ERROR(this->get_logger(), "Failed to get arm move response.");
+            response->success = false;
+            response->message = "Failed to get arm move response.";
+            return;
+        }
+        // Set response for main request
+        if (service_success) {
+            RCLCPP_INFO(this->get_logger(), "The arm was moved successfully.");
+            response->success = true;
+            response->message = game_status;
+            return;
+        } else {
+            RCLCPP_ERROR(this->get_logger(), "The arm failed to perform move.");
+            response->success = false;
+            response->message = game_status;
+        }
+    }
 
     void start_new_game_callback(const std::shared_ptr<std_srvs::srv::Trigger::Request> request, std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
         (void)request;  // to avoid unused parameter warning
