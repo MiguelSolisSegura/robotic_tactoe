@@ -45,45 +45,73 @@ public:
 private:
     void handle_move_to_coordinates(const std::shared_ptr<MoveToCoordinates::Request> request,
                                     std::shared_ptr<MoveToCoordinates::Response> response) {
-        // Initialize the robot to the starting state
-        initialize_robot();
-
-        RCLCPP_INFO(this->get_logger(), "Sleeping for %d seconds at playing position.", this->wait_time);
-        std::this_thread::sleep_for(std::chrono::seconds(this->wait_time));
-        RCLCPP_INFO(this->get_logger(), "Continuing.");
-
-        // Move to the specified target position
-        if (request->mode != 5) {
-            if (!move_to_target(request->x, request->y, request->z)) {
-                response->success = false;
-                return;
-            }
-            RCLCPP_INFO(this->get_logger(), "Sleeping for %d seconds at coordinates location.", this->wait_time);
-            std::this_thread::sleep_for(std::chrono::seconds(this->wait_time));
-            RCLCPP_INFO(this->get_logger(), "Continuing.");
+        // Initialize the robot to the play positon
+        if (!play_position()) {
+            response->success = false;
+            RCLCPP_ERROR(this->get_logger(), "Failed to reach play position.");
         }
+        sleep_arm();
 
         // Handle different modes
         switch (request->mode) {
             case 0:
                 RCLCPP_INFO(this->get_logger(), "Mode 0: Doing nothing.");
+                // Move to the specified target position
+                if (!move_to_target(request->x, request->y, request->z)) {
+                    response->success = false;
+                    RCLCPP_ERROR(this->get_logger(), "Failed to move to provided coordinates.");
+                    break;
+                }
+                sleep_arm();
                 response->success = true;
                 break;
             case 1:
                 RCLCPP_INFO(this->get_logger(), "Mode 1: Drawing X symbol.");
+                // Move to the specified target position
+                if (!move_to_target(request->x, request->y, request->z)) {
+                    response->success = false;
+                    RCLCPP_ERROR(this->get_logger(), "Failed to move to provided coordinates.");
+                    break;
+                }
+                RCLCPP_INFO(this->get_logger(), "Succesfully moved to provided coordinates.");
+                sleep_arm();
                 response->success = draw_x();
                 break;
             case 2:
                 RCLCPP_INFO(this->get_logger(), "Mode 2: Drawing O symbol.");
+                // Move to the specified target position
+                if (!move_to_target(request->x, request->y, request->z)) {
+                    response->success = false;
+                    RCLCPP_ERROR(this->get_logger(), "Failed to move to provided coordinates.");
+                    break;
+                }
+                RCLCPP_INFO(this->get_logger(), "Succesfully moved to provided coordinates.");
+                sleep_arm();
                 response->success = draw_o();
                 break;
             case 3:
                 RCLCPP_INFO(this->get_logger(), "Mode 3: Drawing game board.");
-                response->success = draw_grid(0.03);
+                // Move to the specified target position
+                if (!move_to_target(request->x, request->y, request->z)) {
+                    response->success = false;
+                    RCLCPP_ERROR(this->get_logger(), "Failed to move to provided coordinates.");
+                    break;
+                }
+                RCLCPP_INFO(this->get_logger(), "Succesfully moved to provided coordinates.");
+                sleep_arm();
+                response->success = draw_grid();
                 break;
             case 4:
                 RCLCPP_INFO(this->get_logger(), "Mode 4: Drawing simple line.");
                 response->success = draw_line();
+                // Move to the specified target position
+                if (!move_to_target(request->x, request->y, request->z)) {
+                    response->success = false;
+                    RCLCPP_ERROR(this->get_logger(), "Failed to move to provided coordinates.");
+                    break;
+                }
+                RCLCPP_INFO(this->get_logger(), "Succesfully moved to provided coordinates.");
+                sleep_arm();
                 break;
             case 5:
                 RCLCPP_INFO(this->get_logger(), "Mode 5: Erasing the screen.");
@@ -95,22 +123,38 @@ private:
                 break;
         }
 
-        // Return to the initial position
-        RCLCPP_INFO(this->get_logger(), "Sleeping for %d seconds before finishing.", this->wait_time);
-        std::this_thread::sleep_for(std::chrono::seconds(this->wait_time));
-        RCLCPP_INFO(this->get_logger(), "Continuing.");
-        move_to_play_position();
+        // Return to the play position
+        play_position();
     }
 
-    void initialize_robot() {
+    bool play_position() {
         move_group_->setStartStateToCurrentState();
         move_group_->setNamedTarget("play_position");
         moveit::planning_interface::MoveGroupInterface::Plan my_plan;
         if (move_group_->plan(my_plan) == moveit::core::MoveItErrorCode::SUCCESS) {
-            move_group_->execute(my_plan);
+            return move_group_->execute(my_plan) == moveit::core::MoveItErrorCode::SUCCESS;
         } else {
-            RCLCPP_ERROR(this->get_logger(), "Failed to plan to play position");
+            RCLCPP_ERROR(this->get_logger(), "Failed to plan to play position.");
+            return false;
         }
+    }
+
+    bool clear_position() {
+        move_group_->setStartStateToCurrentState();
+        move_group_->setNamedTarget("clear_board");
+        moveit::planning_interface::MoveGroupInterface::Plan my_plan;
+        if (move_group_->plan(my_plan) == moveit::core::MoveItErrorCode::SUCCESS) {
+            return move_group_->execute(my_plan) == moveit::core::MoveItErrorCode::SUCCESS;
+        } else {
+            RCLCPP_ERROR(this->get_logger(), "Failed to plan to play position.");
+            return false;
+        }
+    }
+
+    void sleep_arm() {
+        RCLCPP_INFO(this->get_logger(), "Sleeping for %d seconds at current position.", this->wait_time);
+        std::this_thread::sleep_for(std::chrono::seconds(this->wait_time));
+        RCLCPP_INFO(this->get_logger(), "Sleep finished, continuing motion.");
     }
 
     bool move_to_target(double x, double y, double z) {
@@ -126,37 +170,24 @@ private:
 
         moveit::planning_interface::MoveGroupInterface::Plan my_plan;
         if (move_group_->plan(my_plan) == moveit::core::MoveItErrorCode::SUCCESS) {
-            move_group_->execute(my_plan);
-            return true;
+            return move_group_->execute(my_plan) == moveit::core::MoveItErrorCode::SUCCESS;
         } else {
             RCLCPP_ERROR(this->get_logger(), "Failed to plan to target position");
             return false;
         }
     }
 
-    void move_to_play_position() {
-        move_group_->setNamedTarget("play_position");
-        moveit::planning_interface::MoveGroupInterface::Plan my_plan;
-        if (move_group_->plan(my_plan) == moveit::core::MoveItErrorCode::SUCCESS) {
-            move_group_->execute(my_plan);
-        } else {
-            RCLCPP_ERROR(this->get_logger(), "Failed to plan to play position");
-        }
-    }
-
     bool clear_board() {
-        move_group_->setNamedTarget("clear_board_real");
-        moveit::planning_interface::MoveGroupInterface::Plan my_plan;
-        float delta = 0.02;
-        if (!move_group_->plan(my_plan) == moveit::core::MoveItErrorCode::SUCCESS) {
-            RCLCPP_ERROR(this->get_logger(), "Failed to plan to play position");
+        if (!clear_position()) {
+            RCLCPP_ERROR(this->get_logger(), "Failed to move to clear position");
             return false;
-            
         }
-        move_group_->execute(my_plan);
-        RCLCPP_INFO(this->get_logger(), "Waiting 10 seconds for stabilization at erasing position.");
-        std::this_thread::sleep_for(std::chrono::seconds(10));
-        RCLCPP_INFO(this->get_logger(), "Continuing.");
+        moveit::planning_interface::MoveGroupInterface::Plan my_plan;
+        float delta = 0.01;
+        RCLCPP_INFO(this->get_logger(), "Waiting %d seconds for stabilization at erasing position.", this->wait_time);
+        std::this_thread::sleep_for(std::chrono::seconds(this->wait_time));
+
+        RCLCPP_INFO(this->get_logger(), "Performing downward motion.");
         geometry_msgs::msg::Pose target_pose = move_group_->getCurrentPose().pose;
         std::vector<geometry_msgs::msg::Pose> waypoints;
         waypoints.push_back(target_pose);
@@ -170,11 +201,16 @@ private:
         const double eef_step = 0.001;
         double fraction = move_group_->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
 
-        return true;
+        if (fraction < 0.95) {
+            RCLCPP_INFO(this->get_logger(), "Failed to compute a cartesian path for the symbol requested.");
+            return false;            
+        }
+
+        return move_group_->execute(trajectory) == moveit::core::MoveItErrorCode::SUCCESS;
     }
 
     bool draw_x() {
-        RCLCPP_INFO(this->get_logger(), "Drawing X symbol");
+        RCLCPP_INFO(this->get_logger(), "Performing X symbol path.");
         geometry_msgs::msg::Pose target_pose = move_group_->getCurrentPose().pose;
 
         std::vector<geometry_msgs::msg::Pose> waypoints;
@@ -184,27 +220,27 @@ private:
         target_pose.position.y -= this->symbol_size / 2;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z -= 0.020;
+        target_pose.position.z -= this->drawing_depth;
         waypoints.push_back(target_pose);
 
         target_pose.position.x += this->symbol_size;
         target_pose.position.y += this->symbol_size;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z += 0.020;
+        target_pose.position.z += this->drawing_depth;
         waypoints.push_back(target_pose);
 
         target_pose.position.x -= this->symbol_size;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z -= 0.020;
+        target_pose.position.z -= this->drawing_depth;
         waypoints.push_back(target_pose);
 
         target_pose.position.x += this->symbol_size;
         target_pose.position.y -= this->symbol_size;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z += 0.020;
+        target_pose.position.z += this->drawing_depth;
         waypoints.push_back(target_pose);
 
         moveit_msgs::msg::RobotTrajectory trajectory;
@@ -212,13 +248,16 @@ private:
         const double eef_step = 0.001;
         double fraction = move_group_->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
 
-        move_group_->execute(trajectory);
+        if (fraction < 0.95) {
+            RCLCPP_INFO(this->get_logger(), "Failed to compute a cartesian path for the symbol requested.");
+            return false;            
+        }
 
-        return fraction > 0.95;
+        return move_group_->execute(trajectory) == moveit::core::MoveItErrorCode::SUCCESS;
     }
 
     bool draw_o() {
-        RCLCPP_INFO(this->get_logger(), "Drawing O symbol");
+        RCLCPP_INFO(this->get_logger(), "Performing O symbol path.");
         geometry_msgs::msg::Pose target_pose = move_group_->getCurrentPose().pose;
 
         std::vector<geometry_msgs::msg::Pose> waypoints;
@@ -230,7 +269,7 @@ private:
         int num_points = 64;
 
         target_pose.position.x = centerX + radius;
-        target_pose.position.z -= 0.020;
+        target_pose.position.z -= this->drawing_depth;
         waypoints.push_back(target_pose);
 
         for (int i = 0; i < num_points; ++i) {
@@ -240,7 +279,7 @@ private:
             waypoints.push_back(target_pose);
         }
 
-        target_pose.position.z += 0.020;
+        target_pose.position.z += this->drawing_depth;
         waypoints.push_back(target_pose);
 
         moveit_msgs::msg::RobotTrajectory trajectory;
@@ -248,28 +287,28 @@ private:
         const double eef_step = 0.001;
         double fraction = move_group_->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
 
-        move_group_->execute(trajectory);
+        if (fraction < 0.95) {
+            RCLCPP_INFO(this->get_logger(), "Failed to compute a cartesian path for the symbol requested.");
+            return false;
+        }
 
-        return fraction > 0.95;
+        return move_group_->execute(trajectory) == moveit::core::MoveItErrorCode::SUCCESS;
     }
 
     bool draw_line() {
-        RCLCPP_INFO(this->get_logger(), "Drawing a simple line");
+        RCLCPP_INFO(this->get_logger(), "Performing a simple line path.");
         geometry_msgs::msg::Pose target_pose = move_group_->getCurrentPose().pose;
 
         std::vector<geometry_msgs::msg::Pose> waypoints;
         waypoints.push_back(target_pose);
 
-        // target_pose.position.x -= 0.025;
-        // waypoints.push_back(target_pose);
-
-        target_pose.position.z -= 0.020;
+        target_pose.position.z -= drawing_depth;
         waypoints.push_back(target_pose);
 
-        target_pose.position.x += 0.050;
+        target_pose.position.x += symbol_size;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z += 0.020;
+        target_pose.position.z += drawing_depth;
         waypoints.push_back(target_pose);
 
         moveit_msgs::msg::RobotTrajectory trajectory;
@@ -277,89 +316,92 @@ private:
         const double eef_step = 0.001;
         double fraction = move_group_->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
 
-        move_group_->execute(trajectory);
+        if (fraction < 0.95) {
+            RCLCPP_INFO(this->get_logger(), "Failed to compute a cartesian path for the symbol requested.");
+            return false;
+        }
 
-        return fraction > 0.95;
+        return move_group_->execute(trajectory) == moveit::core::MoveItErrorCode::SUCCESS;
     }
 
-    bool draw_grid(double cell_size) {
-        RCLCPP_INFO(this->get_logger(), "Drawing tic-tac-toe grid");
+    bool draw_grid() {
+        RCLCPP_INFO(this->get_logger(), "Performing a tic-tac-toe grid path.");
         geometry_msgs::msg::Pose target_pose = move_group_->getCurrentPose().pose;
 
-        double center_x = target_pose.position.x;
-        double center_y = target_pose.position.y;
-        double initial_z = target_pose.position.z;
+        float center_x = target_pose.position.x;
+        float center_y = target_pose.position.y;
+        float cell_size = grid_size / 3;
 
         std::vector<geometry_msgs::msg::Pose> waypoints;
 
         // First vertical line
         target_pose.position.x = center_x - cell_size / 2;
         target_pose.position.y = center_y - 1.5 * cell_size;
-        target_pose.position.z = initial_z;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z = initial_z - 0.020;
+        target_pose.position.z -= drawing_depth;
         waypoints.push_back(target_pose);
 
         target_pose.position.y = center_y + 1.5 * cell_size;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z = initial_z;
+        target_pose.position.z += drawing_depth;
         waypoints.push_back(target_pose);
-
+        
         // Second vertical line
         target_pose.position.x = center_x + cell_size / 2;
         target_pose.position.y = center_y - 1.5 * cell_size;
-        target_pose.position.z = initial_z;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z = initial_z - 0.020;
+        target_pose.position.z -= drawing_depth;
         waypoints.push_back(target_pose);
 
         target_pose.position.y = center_y + 1.5 * cell_size;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z = initial_z;
+        target_pose.position.z += drawing_depth;
         waypoints.push_back(target_pose);
-
+        
         // First horizontal line
-        target_pose.position.x = center_x - 1.5 * cell_size;
+        target_pose.position.x = center_x - 1.0 * cell_size;
         target_pose.position.y = center_y - cell_size / 2;
-        target_pose.position.z = initial_z;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z = initial_z - 0.020;
+        target_pose.position.z -= drawing_depth;
         waypoints.push_back(target_pose);
 
-        target_pose.position.x = center_x + 1.5 * cell_size;
+        target_pose.position.x = center_x + 1.0 * cell_size;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z = initial_z;
+        target_pose.position.z += drawing_depth;
         waypoints.push_back(target_pose);
-
+      
         // Second horizontal line
-        target_pose.position.x = center_x - 1.5 * cell_size;
+        target_pose.position.x = center_x - 1.0 * cell_size;
         target_pose.position.y = center_y + cell_size / 2;
-        target_pose.position.z = initial_z;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z = initial_z - 0.020;
+        target_pose.position.z -= drawing_depth;
         waypoints.push_back(target_pose);
 
-        target_pose.position.x = center_x + 1.5 * cell_size;
+        target_pose.position.x = center_x + 1.0 * cell_size;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z = initial_z;
+        target_pose.position.z += drawing_depth;
         waypoints.push_back(target_pose);
+    
 
         moveit_msgs::msg::RobotTrajectory trajectory;
         const double jump_threshold = 0.0;
         const double eef_step = 0.001;
         double fraction = move_group_->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
 
-        move_group_->execute(trajectory);
+        if (fraction < 0.95) {
+            RCLCPP_INFO(this->get_logger(), "Failed to compute a cartesian path for the symbol requested.");
+            return false;
+        }
 
-        return fraction > 0.95;
+        return move_group_->execute(trajectory) == moveit::core::MoveItErrorCode::SUCCESS;
     }
 
     rclcpp::Service<MoveToCoordinates>::SharedPtr service_;
@@ -369,6 +411,7 @@ private:
     rclcpp::executors::SingleThreadedExecutor executor_;
     float symbol_size = 0.030;
     float grid_size = 0.135;
+    float drawing_depth = 0.01;
     int wait_time;
 };
 

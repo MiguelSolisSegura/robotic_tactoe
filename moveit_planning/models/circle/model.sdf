@@ -1,0 +1,16 @@
+<?xml version="1.0" ?>
+<sdf version='1.4'>
+  <model name="circle">
+      <static>1</static>
+      <link name='link'>
+        <visual name='visual'>
+            <geometry>
+                <mesh>
+                    <uri>model://circle/meshes/circle.dae</uri>
+                    <scale>1 1 1</scale>
+                </mesh>
+            </geometry>
+        </visual>
+      </link>
+  </model>
+</sdf>

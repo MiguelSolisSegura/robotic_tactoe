@@ -102,7 +102,8 @@ class ImageProcessor(Node):
         circle_n = 0
         for label in range(1, num_labels):
             if label == largest_component:
-                output_image[labels_im == label] = [255, 255, 0]  # Cyan color for the largest component (grid)
+                # White color for the largest component (grid)
+                output_image[labels_im == label] = [255, 255, 255]  
             else:
                 # Extract the component
                 component_mask = (labels_im == label).astype(np.uint8) * 255

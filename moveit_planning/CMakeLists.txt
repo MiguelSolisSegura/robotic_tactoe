@@ -101,5 +101,6 @@ target_link_libraries(tic_tac_toe "${cpp_typesupport_target}")
 install(DIRECTORY 
 	launch
 	config
+	models
     DESTINATION share/${PROJECT_NAME}
 )
