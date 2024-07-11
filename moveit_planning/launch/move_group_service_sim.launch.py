@@ -24,7 +24,7 @@ def generate_launch_description():
         ],
     )
     
-    # Arm move ervice
+    # Arm move service
     moveit_cpp_node = Node(
         name="move_group_service",
         package="moveit_planning",

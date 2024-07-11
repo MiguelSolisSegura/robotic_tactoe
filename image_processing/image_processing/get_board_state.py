@@ -128,11 +128,11 @@ class ImageProcessor(Node):
         # Add text annotations
         board_present = num_labels > 1
         board_text = f"Board: {int(board_present)}"
-        cross_text = f"Cross: {cross_n}"
-        circle_text = f"Circle: {circle_n}"
-        cv2.putText(output_image, board_text, (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 2, cv2.LINE_AA)
-        cv2.putText(output_image, cross_text, (10, 160), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 2, cv2.LINE_AA)
-        cv2.putText(output_image, circle_text, (10, 260), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 2, cv2.LINE_AA)
+        cross_text = f"Cross:{cross_n}"
+        circle_text = f"Circle:{circle_n}"
+        #cv2.putText(output_image, board_text, (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 4, (255, 255, 255), 6, cv2.LINE_AA)
+        cv2.putText(output_image, cross_text, (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 4, (0, 0, 255), 10, cv2.LINE_AA)
+        cv2.putText(output_image, circle_text, (50, 300), cv2.FONT_HERSHEY_SIMPLEX, 4, (0, 255, 0), 10, cv2.LINE_AA)
 
         self.board_state = board_state
         return output_image, num_labels, labels_im, grid_bbox

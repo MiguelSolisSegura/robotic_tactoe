@@ -1,0 +1,12 @@
+div#app > div > div {
+    padding:10px 20px;
+    border-top: 1px solid black;
+}
+
+div#app > div input {
+    height:30px;
+}
+div#app > div button {
+    margin-top: 10px;
+    height:24px;
+}
