@@ -1,3 +1,5 @@
-string command
+bool manual    # request an intelligent or manual move
+int32 command    # number from 0-8 to manually control the arm
 ---
-bool completed 
+bool success   # indicate successful run of triggered service
+string message # informational, e.g. for error messages

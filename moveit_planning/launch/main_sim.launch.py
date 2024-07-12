@@ -20,9 +20,9 @@ def generate_launch_description():
         executable='get_board_state',
         name='get_board_state',
         output='screen',
-        #parameters=[
-        #    {'param_name': 'param_value'}
-        #],
+        parameters=[
+            {'sim': True}
+        ],
     )
 
     # Compute best move service
@@ -38,10 +38,7 @@ def generate_launch_description():
         executable='tic_tac_toe',
         name='tic_tac_toe',
         output='screen',
-        #parameters=[
-        #    {'param_name': 'param_value'}
-        #],
-    )
+        parameters=[{'sim': True}])
 
     return LaunchDescription([
         arm_planning,

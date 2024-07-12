@@ -2,6 +2,7 @@
 #include "moveit_planning/srv/get_board_state.hpp"
 #include "moveit_planning/srv/compute_best_move.hpp"
 #include "moveit_planning/srv/move_to_coordinates.hpp"
+#include "moveit_planning/srv/make_move.hpp"
 #include "std_srvs/srv/trigger.hpp"
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <fstream>
@@ -38,17 +39,17 @@ public:
             "move_to_coordinates", rmw_qos_profile_services_default, callback_group_);
         
         // Initialize services
-        ask_for_next_move_service_ = this->create_service<std_srvs::srv::Trigger>(
+        ask_for_next_move_service_ = this->create_service<moveit_planning::srv::MakeMove>(
             "ask_for_next_move", std::bind(&TicTacToeOrchestrator::ask_for_next_move_callback, this, _1, _2),
             rmw_qos_profile_services_default, callback_group_);
         start_new_game_service_ = this->create_service<std_srvs::srv::Trigger>(
             "start_new_game", std::bind(&TicTacToeOrchestrator::start_new_game_callback, this, _1, _2));
 
-        // Load mapping from sim_config.txt
-        load_coordinates_mapping();
+        // Parameter for switching between simulation and real modes
+        this->declare_parameter<bool>("sim", false);
 
-        // Parameter for switching between simulation and real
-        this->declare_parameter<bool>("sim", true);
+        // Load mapping from configuration file
+        load_coordinates_mapping();
 
         RCLCPP_INFO(this->get_logger(), "Main node tic-tac-toe orchestrator started.");
     }
@@ -60,7 +61,7 @@ private:
     rclcpp::Client<moveit_planning::srv::MoveToCoordinates>::SharedPtr move_to_coordinates_client_;
 
     // Services
-    rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr ask_for_next_move_service_;
+    rclcpp::Service<moveit_planning::srv::MakeMove>::SharedPtr ask_for_next_move_service_;
     rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr start_new_game_service_;
 
     // Callback group
@@ -83,12 +84,20 @@ private:
      * @brief Load the coordinates mapping from the sim_config.txt file.
      */
     void load_coordinates_mapping() {
+        // Filename with coordinates
+        bool sim = this->get_parameter("sim").as_bool();
+        std::string file_name;
+        if (sim) {
+            file_name = "sim_config.txt";
+        } else {
+            file_name = "real_config.txt";
+        }
         
-        std::string config_file = this->package_directory_ + "/config/sim_config.txt"; 
+        std::string config_file = this->package_directory_ + "/config/" + file_name; 
 
         std::ifstream file(config_file);
         if (!file) {
-            RCLCPP_ERROR(this->get_logger(), "Failed to open sim_config.txt");
+            RCLCPP_ERROR(this->get_logger(), "Failed to open %s", file_name.c_str());
             return;
         }
 
@@ -97,7 +106,7 @@ private:
         while (file >> move >> x >> y >> z) {
             coordinates_mapping_[move] = {x, y, z};
         }
-        RCLCPP_INFO(this->get_logger(), "Loaded coordinates mapping from sim_config.txt.");
+        RCLCPP_INFO(this->get_logger(), "Loaded coordinates mapping from %s", file_name.c_str());
     }
 
     /**
@@ -107,14 +116,15 @@ private:
      * @param response The service response.
      */
     void ask_for_next_move_callback(
-        const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
-        std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+        const std::shared_ptr<moveit_planning::srv::MakeMove::Request> request,
+        std::shared_ptr<moveit_planning::srv::MakeMove::Response> response) {
 
-        // Avoid unused parameter warning
-        (void)request;
-
-        RCLCPP_INFO(this->get_logger(), "Received request to determine and perform the next move.");
-
+        if (request->manual) {
+            RCLCPP_INFO(this->get_logger(), "Received request to perform a manual move.");
+        } else {
+            RCLCPP_INFO(this->get_logger(), "Received request to perform an intelligent move.");
+        }
+        
         if (terminal_state_) {
             RCLCPP_ERROR(this->get_logger(), "The game is in a terminal state. Please start a new game.");
             response->success = false;
@@ -170,8 +180,7 @@ private:
             return;
         }
 
-        // Set flag if the game is in a terminal state
-        if (game_status != "Game in progress") {terminal_state_ = true;}
+        if (request->manual) {best_move = request->command;}
 
         // Create a request for /move_to_coordinates service
         auto move_to_coordinates_request = std::make_shared<moveit_planning::srv::MoveToCoordinates::Request>();
@@ -205,6 +214,8 @@ private:
             RCLCPP_INFO(this->get_logger(), "The arm was moved successfully.");
             response->success = true;
             response->message = game_status;
+            // Set flag if the game is in a terminal state
+            if (game_status != "Game in progress") {terminal_state_ = true;}
         } else {
             RCLCPP_ERROR(this->get_logger(), "The arm failed to perform move.");
             response->success = false;
@@ -212,8 +223,7 @@ private:
             return;
         }
 
-        bool sim;
-        this->get_parameter("sim", sim);
+        bool sim = this->get_parameter("sim").as_bool();
 
         if (sim) {
             // Define the command to spawn the entity
@@ -295,8 +305,7 @@ private:
         // Set flag for terminal state
         terminal_state_ = false;
 
-        bool sim;
-        this->get_parameter("sim", sim);
+        bool sim = this->get_parameter("sim").as_bool();
 
         if (sim) {
             // Define the command to spawn the entity

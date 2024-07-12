@@ -92,7 +92,7 @@
             <div class="card card-chart">
               <div class="card-header">
                 <h5 class="card-category">Manipulation</h5>
-                <h3 class="card-title"><i class="tim-icons icon-controller text-success"></i> Play Tic-Tac-Toe</h3>
+                <h3 class="card-title"><i class="tim-icons icon-controller text-success"></i> Robot Control</h3>
               </div>
               <div class="card-body">
                 <div class="chart-area">
@@ -153,7 +153,22 @@
               </div>
               <div class="card-body">
                 <div class="chart-area">
-                  <canvas id="chartLineGreen"></canvas>
+                  <p style="margin-left: 15px;"> Use the panel below to make a move in the corresponding position.</p>
+                    <row style="display: flex; justify-content: center; align-items: center; margin-top: 5%;">
+                        <button class="btn btn-primary" style="margin: 0 10px; width: 80px;" @click="callNextManualService(0)">0</button>
+                        <button class="btn btn-primary" style="margin: 0 10px; width: 80px;" @click="callNextManualService(1)">1</button>
+                        <button class="btn btn-primary" style="margin: 0 10px; width: 80px;" @click="callNextManualService(2)">2</button>
+                        </row>
+                        <row style="display: flex; justify-content: center; align-items: center; margin-top: 20px;">
+                        <button class="btn btn-primary" style="margin: 0 10px; width: 80px;" @click="callNextManualService(3)">3</button>
+                        <button class="btn btn-primary" style="margin: 0 10px; width: 80px;" @click="callNextManualService(4)">4</button>
+                        <button class="btn btn-primary" style="margin: 0 10px; width: 80px;" @click="callNextManualService(5)">5</button>
+                        </row>
+                        <row style="display: flex; justify-content: center; align-items: center; margin-top: 20px;">
+                        <button class="btn btn-primary" style="margin: 0 10px; width: 80px;" @click="callNextManualService(6)">6</button>
+                        <button class="btn btn-primary" style="margin: 0 10px; width: 80px;" @click="callNextManualService(7)">7</button>
+                        <button class="btn btn-primary" style="margin: 0 10px; width: 80px;" @click="callNextManualService(8)">8</button>
+                    </row>
                 </div>
               </div>
             </div>

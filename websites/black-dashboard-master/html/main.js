@@ -104,10 +104,33 @@ var app = new Vue({
         let service = new ROSLIB.Service({
             ros: this.ros,
             name: '/ask_for_next_move',
-            serviceType: 'std_srvs/srv/Trigger',
+            serviceType: 'moveit_planning/srv/MakeMove',
         })
         // Define the request
         let request = new ROSLIB.ServiceRequest({})
+        // Define a callback
+        service.callService(request, (result) => {
+            this.service_busy = false
+            this.service_response = JSON.stringify(result)
+        }, (error) => {
+            this.service_busy = false
+            console.error(error)
+        })
+    },
+    callNextManualService: function(inputValue) {
+        // Service is busy
+        this.service_busy = true
+        this.service_response = ''
+        // Define the service to be called
+        let service = new ROSLIB.Service({
+            ros: this.ros,
+            name: '/ask_for_next_move',
+            serviceType: 'moveit_planning/srv/MakeMove',
+        })
+        // Define the request
+        let request = new ROSLIB.ServiceRequest({
+            manual: true,
+            command: inputValue})
         // Define a callback
         service.callService(request, (result) => {
             this.service_busy = false

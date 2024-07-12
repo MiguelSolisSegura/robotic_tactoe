@@ -13,6 +13,10 @@ from moveit_planning.srv import GetBoardState
 class ImageProcessor(Node):
     def __init__(self):
         super().__init__('image_processor')
+
+        # Switch between real and simulation modes
+        self.declare_parameter('sim', False)
+        self.mode_sim = self.get_parameter('sim').get_parameter_value().bool_value
         
         self.callback_group = ReentrantCallbackGroup()
         
@@ -29,11 +33,11 @@ class ImageProcessor(Node):
 
         self.board_state = [0] * 9
         self.service = self.create_service(GetBoardState, 'get_board_state', self.get_board_state_callback)
-        self.get_logger().info('Image processing started.')
+
+        string_mode = "sim" if self.mode_sim else "real"
+        self.get_logger().info(f'Image processing started in {string_mode} mode.')
         
     def image_callback(self, msg):
-        
-        
         try:
             # Convert the ROS image message to a BGR image
             cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
@@ -45,7 +49,8 @@ class ImageProcessor(Node):
         gray_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
         
         # Define trapezoidal ROI points
-        pts = np.array([[675, 325], [1235, 325], [1380, 820], [520, 820]], np.int32)
+        if self.mode_sim: pts = np.array([[675, 325], [1235, 325], [1380, 820], [520, 820]], np.int32)
+        else: pts = np.array([[675, 325], [1235, 325], [1380, 820], [520, 820]], np.int32) # TODO FILL REAL POINTS
         pts = pts.reshape((-1, 1, 2))
         
         mask = np.zeros(gray_image.shape[:2], dtype=np.uint8)
