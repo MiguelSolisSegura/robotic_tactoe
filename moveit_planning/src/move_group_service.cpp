@@ -35,9 +35,9 @@ public:
 
         // Parameters for controlling end effector orientation
         this->declare_parameter<double>("orientation_x", 0.0);
-        this->declare_parameter<double>("orientation_y", 0.0);
+        this->declare_parameter<double>("orientation_y", 1.0);
         this->declare_parameter<double>("orientation_z", 0.0);
-        this->declare_parameter<double>("orientation_w", 1.0);
+        this->declare_parameter<double>("orientation_w", 0.0);
 
         RCLCPP_INFO(this->get_logger(), "Service server ready.");
     }
@@ -158,6 +158,7 @@ private:
     }
 
     bool move_to_target(double x, double y, double z) {
+        // Build the target pose
         geometry_msgs::msg::Pose target_pose;
         this->get_parameter("orientation_x", target_pose.orientation.x);
         this->get_parameter("orientation_y", target_pose.orientation.y);
@@ -166,13 +167,53 @@ private:
         target_pose.position.x = x;
         target_pose.position.y = y;
         target_pose.position.z = z;
-        move_group_->setPoseTarget(target_pose);
 
-        moveit::planning_interface::MoveGroupInterface::Plan my_plan;
-        if (move_group_->plan(my_plan) == moveit::core::MoveItErrorCode::SUCCESS) {
-            return move_group_->execute(my_plan) == moveit::core::MoveItErrorCode::SUCCESS;
+        move_group_->setPoseTarget(target_pose);
+        std::vector<moveit::planning_interface::MoveGroupInterface::Plan> plans;
+        const int num_attempts = 5;  // Number of planning attempts
+
+        // Generate multiple plans
+        for (int i = 0; i < num_attempts; ++i) {
+            moveit::planning_interface::MoveGroupInterface::Plan temp_plan;
+            if (move_group_->plan(temp_plan) == moveit::core::MoveItErrorCode::SUCCESS) {
+                plans.push_back(temp_plan);
+            } else {
+                RCLCPP_WARN(this->get_logger(), "Planning attempt %d failed", i + 1);
+            }
+        }
+
+        if (plans.empty()) {
+            RCLCPP_ERROR(this->get_logger(), "All planning attempts failed");
+            return false;
+        }
+
+        // Function to evaluate the quality of a plan
+        auto evaluatePlan = [](const moveit::planning_interface::MoveGroupInterface::Plan &plan) {
+            double path_length = 0.0;
+            const auto &trajectory = plan.trajectory_.joint_trajectory;
+            for (size_t i = 1; i < trajectory.points.size(); ++i) {
+                double segment_length = 0.0;
+                for (size_t j = 0; j < trajectory.joint_names.size(); ++j) {
+                    double delta = trajectory.points[i].positions[j] - trajectory.points[i-1].positions[j];
+                    segment_length += delta * delta;
+                }
+                path_length += std::sqrt(segment_length);
+            }
+            return path_length;
+        };
+
+        // Evaluate all plans and find the best one
+        auto best_plan = std::min_element(plans.begin(), plans.end(),
+            [&](const moveit::planning_interface::MoveGroupInterface::Plan &a, 
+                const moveit::planning_interface::MoveGroupInterface::Plan &b) {
+                return evaluatePlan(a) < evaluatePlan(b);
+            });
+
+        // Execute the best plan
+        if (move_group_->execute(*best_plan) == moveit::core::MoveItErrorCode::SUCCESS) {
+            return true;
         } else {
-            RCLCPP_ERROR(this->get_logger(), "Failed to plan to target position");
+            RCLCPP_ERROR(this->get_logger(), "Failed to execute the best plan");
             return false;
         }
     }

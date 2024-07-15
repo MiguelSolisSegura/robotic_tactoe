@@ -270,10 +270,11 @@ def generate_launch_description():
         ],
     )
 
-    moveit_cpp_node = Node(
-        name="move_group_service_real",
+    # Service for controlling arm
+    move_service = Node(
+        name="move_group_service",
         package="moveit_planning",
-        executable="move_group_service_real",
+        executable="move_group_service",
         output="screen",
         parameters=[
             robot_description,
@@ -283,8 +284,11 @@ def generate_launch_description():
         ],
     )
 
+
     nodes_to_start = [
-        moveit_cpp_node
+        move_group_node,
+        rviz_node,
+        move_service
     ]
 
     return LaunchDescription(declared_arguments + nodes_to_start)
