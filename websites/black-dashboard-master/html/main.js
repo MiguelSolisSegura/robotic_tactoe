@@ -56,7 +56,7 @@ var app = new Vue({
         host: host,
         width: 384,
         height: 216,
-        topic: '/demo_cam/camera1/image_raw',
+        topic: '/camera1/image_raw',
         ssl: true,
       })
       viewer.canvas.classList.add('camera-image');

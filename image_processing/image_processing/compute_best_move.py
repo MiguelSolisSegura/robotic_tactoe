@@ -144,7 +144,7 @@ class BestMoveCalculator(Node):
 
     def evaluate_game_status(self, board, best_move, player):
         # Make the best move to evaluate the game status
-        board[best_move] = player
+        # board[best_move] = player
         score = self.evaluate(board)
 
         if score == 10:

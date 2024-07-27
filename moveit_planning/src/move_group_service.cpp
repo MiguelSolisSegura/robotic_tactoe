@@ -1,5 +1,7 @@
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
+#include <moveit/trajectory_processing/iterative_time_parameterization.h>
+#include <moveit/robot_trajectory/robot_trajectory.h>
 #include <moveit_msgs/msg/display_robot_state.hpp>
 #include <moveit_msgs/msg/display_trajectory.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -102,8 +104,7 @@ private:
                 response->success = draw_grid();
                 break;
             case 4:
-                RCLCPP_INFO(this->get_logger(), "Mode 4: Drawing simple line.");
-                response->success = draw_line();
+                RCLCPP_INFO(this->get_logger(), "Mode 4: Drawing simple line."); 
                 // Move to the specified target position
                 if (!move_to_target(request->x, request->y, request->z)) {
                     response->success = false;
@@ -112,6 +113,7 @@ private:
                 }
                 RCLCPP_INFO(this->get_logger(), "Succesfully moved to provided coordinates.");
                 sleep_arm();
+                response->success = draw_line(); 
                 break;
             case 5:
                 RCLCPP_INFO(this->get_logger(), "Mode 5: Erasing the screen.");
@@ -287,11 +289,17 @@ private:
         moveit_msgs::msg::RobotTrajectory trajectory;
         const double jump_threshold = 0.0;
         const double eef_step = 0.001;
-        double fraction = move_group_->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
 
+        double fraction;
+        for (int i = 0; i < 10; i++){
+            RCLCPP_INFO(this->get_logger(), "Attempt %d to compute a cartesian path for the symbol requested.", i+1);
+            fraction = move_group_->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
+            if (fraction > 0.95) {break;}
+        }
+        
         if (fraction < 0.95) {
             RCLCPP_INFO(this->get_logger(), "Failed to compute a cartesian path for the symbol requested.");
-            return false;            
+            return false;
         }
 
         return move_group_->execute(trajectory) == moveit::core::MoveItErrorCode::SUCCESS;
@@ -310,6 +318,7 @@ private:
         int num_points = 64;
 
         target_pose.position.x = centerX + radius;
+        waypoints.push_back(target_pose);
         target_pose.position.z -= this->drawing_depth;
         waypoints.push_back(target_pose);
 
@@ -326,8 +335,14 @@ private:
         moveit_msgs::msg::RobotTrajectory trajectory;
         const double jump_threshold = 0.0;
         const double eef_step = 0.001;
-        double fraction = move_group_->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
 
+        double fraction;
+        for (int i = 0; i < 10; i++){
+            RCLCPP_INFO(this->get_logger(), "Attempt %d to compute a cartesian path for the symbol requested.", i+1);
+            fraction = move_group_->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
+            if (fraction > 0.95) {break;}
+        }
+        
         if (fraction < 0.95) {
             RCLCPP_INFO(this->get_logger(), "Failed to compute a cartesian path for the symbol requested.");
             return false;
@@ -352,17 +367,17 @@ private:
         target_pose.position.z += drawing_depth;
         waypoints.push_back(target_pose);
 
-        moveit_msgs::msg::RobotTrajectory trajectory;
+        moveit_msgs::msg::RobotTrajectory trajectory_msg;
         const double jump_threshold = 0.0;
         const double eef_step = 0.001;
-        double fraction = move_group_->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
+        double fraction = move_group_->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory_msg);
 
         if (fraction < 0.95) {
             RCLCPP_INFO(this->get_logger(), "Failed to compute a cartesian path for the symbol requested.");
             return false;
         }
 
-        return move_group_->execute(trajectory) == moveit::core::MoveItErrorCode::SUCCESS;
+        return move_group_->execute(trajectory_msg) == moveit::core::MoveItErrorCode::SUCCESS;
     }
 
     bool draw_grid() {
@@ -377,30 +392,30 @@ private:
 
         // First vertical line
         target_pose.position.x = center_x - cell_size / 2;
-        target_pose.position.y = center_y - 1.5 * cell_size;
+        target_pose.position.y = center_y - 1.0 * cell_size;
         waypoints.push_back(target_pose);
 
         target_pose.position.z -= drawing_depth;
         waypoints.push_back(target_pose);
 
-        target_pose.position.y = center_y + 1.5 * cell_size;
+        target_pose.position.y = center_y + 1.0 * cell_size;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z += drawing_depth;
+        target_pose.position.z +=  2.0 * drawing_depth;
         waypoints.push_back(target_pose);
         
         // Second vertical line
         target_pose.position.x = center_x + cell_size / 2;
-        target_pose.position.y = center_y - 1.5 * cell_size;
+        target_pose.position.y = center_y - 1.0 * cell_size;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z -= drawing_depth;
+        target_pose.position.z -= 2.0 * drawing_depth;
         waypoints.push_back(target_pose);
 
-        target_pose.position.y = center_y + 1.5 * cell_size;
+        target_pose.position.y = center_y + 1.0 * cell_size;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z += drawing_depth;
+        target_pose.position.z += 2.0 * drawing_depth;
         waypoints.push_back(target_pose);
         
         // First horizontal line
@@ -408,13 +423,13 @@ private:
         target_pose.position.y = center_y - cell_size / 2;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z -= drawing_depth;
+        target_pose.position.z -= 2.0 * drawing_depth;
         waypoints.push_back(target_pose);
 
         target_pose.position.x = center_x + 1.0 * cell_size;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z += drawing_depth;
+        target_pose.position.z += 2.0 * drawing_depth;
         waypoints.push_back(target_pose);
       
         // Second horizontal line
@@ -422,21 +437,27 @@ private:
         target_pose.position.y = center_y + cell_size / 2;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z -= drawing_depth;
+        target_pose.position.z -= 2.0 * drawing_depth;
         waypoints.push_back(target_pose);
 
         target_pose.position.x = center_x + 1.0 * cell_size;
         waypoints.push_back(target_pose);
 
-        target_pose.position.z += drawing_depth;
+        target_pose.position.z += 2.0 * drawing_depth;
         waypoints.push_back(target_pose);
     
 
         moveit_msgs::msg::RobotTrajectory trajectory;
         const double jump_threshold = 0.0;
         const double eef_step = 0.001;
-        double fraction = move_group_->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
 
+        double fraction;
+        for (int i = 0; i < 10; i++){
+            RCLCPP_INFO(this->get_logger(), "Attempt %d to compute a cartesian path for the symbol requested.", i+1);
+            fraction = move_group_->computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
+            if (fraction > 0.95) {break;}
+        }
+        
         if (fraction < 0.95) {
             RCLCPP_INFO(this->get_logger(), "Failed to compute a cartesian path for the symbol requested.");
             return false;
@@ -450,7 +471,7 @@ private:
     std::string planning_group_;
     rclcpp::Node::SharedPtr move_group_node_;
     rclcpp::executors::SingleThreadedExecutor executor_;
-    float symbol_size = 0.030;
+    float symbol_size = 0.020;
     float grid_size = 0.135;
     float drawing_depth = 0.01;
     int wait_time;

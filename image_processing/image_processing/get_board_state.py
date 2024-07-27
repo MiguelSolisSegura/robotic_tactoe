@@ -22,7 +22,7 @@ class ImageProcessor(Node):
         
         self.subscription = self.create_subscription(
             Image,
-            '/demo_cam/camera1/image_raw',
+            '/camera1/image_raw',
             self.image_callback,
             10,
             callback_group=self.callback_group)
@@ -49,43 +49,45 @@ class ImageProcessor(Node):
         gray_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
         
         # Define trapezoidal ROI points
-        if self.mode_sim: pts = np.array([[675, 325], [1235, 325], [1380, 820], [520, 820]], np.int32)
-        else: pts = np.array([[675, 325], [1235, 325], [1380, 820], [520, 820]], np.int32) # TODO FILL REAL POINTS
-        pts = pts.reshape((-1, 1, 2))
+        if self.mode_sim:
+            src_pts = np.array([[675, 325], [1235, 325], [1380, 820], [520, 820]], dtype=np.float32)
+        else:
+            src_pts = np.array([[143, 61], [274, 61], [317, 194], [77, 194]], dtype=np.float32)
+            #src_pts = np.array([[143, 61], [274, 61], [317, 215], [77, 215]], dtype=np.float32)
         
-        mask = np.zeros(gray_image.shape[:2], dtype=np.uint8)
-        cv2.fillPoly(mask, [pts], 255)
+        # Define destination points for the warp transform
+        dst_pts = np.array([[0, 0], [gray_image.shape[1] - 1, 0], [gray_image.shape[1] - 1, gray_image.shape[0] - 1], [0, gray_image.shape[0] - 1]], dtype=np.float32)
         
-        # Apply the mask to the image
-        masked_image = cv2.bitwise_and(gray_image, gray_image, mask=mask)
+        # Calculate the perspective transform matrix
+        M = cv2.getPerspectiveTransform(src_pts, dst_pts)
         
-        # Fill everything outside the ROI with black
-        masked_image[mask == 0] = 0
-
-        segmented_image, num_labels, labels_im, grid_bbox = self.image_segmentation(masked_image)
+        # Perform the warp transformation
+        warped_image = cv2.warpPerspective(gray_image, M, (gray_image.shape[1], gray_image.shape[0]))
+        
+        segmented_image, num_labels, labels_im, grid_bbox = self.image_segmentation(warped_image)
         
         processed_image_msg = self.bridge.cv2_to_imgmsg(segmented_image, encoding='bgr8')
         
         self.publisher_.publish(processed_image_msg)
         
-
     def image_segmentation(self, img, dilate_iterations=1):
         # Ensure the input image is a numpy array
         if not isinstance(img, np.ndarray):
             raise ValueError("Input image must be a numpy array")
 
         # Apply binary threshold
-        _, binary_img = cv2.threshold(img, 95, 255, cv2.THRESH_BINARY)
+        threshold = 80 if self.mode_sim else 120
+        _, binary_img = cv2.threshold(img, threshold, 255, cv2.THRESH_BINARY)
 
         # Apply dilation
         kernel = np.ones((3, 3), np.uint8)
-        dilated_img = cv2.dilate(binary_img, kernel, iterations=dilate_iterations)
+        dilated_img = cv2.dilate(binary_img, kernel, iterations=1)
 
         # Label connected components
         num_labels, labels_im = cv2.connectedComponents(dilated_img)
 
         # Create an output image with colored segments
-        output_image = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        output_image = cv2.cvtColor(dilated_img, cv2.COLOR_GRAY2BGR)
 
         if num_labels <= 1:
             # No components found
@@ -105,39 +107,73 @@ class ImageProcessor(Node):
         # Color the components
         cross_n = 0
         circle_n = 0
+
         for label in range(1, num_labels):
             if label == largest_component:
                 # White color for the largest component (grid)
-                output_image[labels_im == label] = [255, 255, 255]  
+                output_image[labels_im == label] = [255, 255, 0]  
             else:
                 # Extract the component
                 component_mask = (labels_im == label).astype(np.uint8) * 255
+                
                 # Calculate geometric middle
                 x, y, w, h = cv2.boundingRect(component_mask)
+
+                # Draw the bounding box on the output image
+                #cv2.rectangle(output_image, (x, y), (x + w, y + h), (255, 0, 255), 10)
+
                 middle_x = x + w // 2
                 middle_y = y + h // 2
-                start_x = x + w // 3
-                end_x = x + 2 * w // 3
-                middle_line = component_mask[middle_y:middle_y + 1, start_x:end_x]
+                x_1_3 = x + w // 3
+                x_2_3 = x + 2 * w // 3
+                y_1_3 = y + h // 3
+                y_2_3 = y + 2 * h // 3
 
-                # Check for white pixels in the middle third
-                if np.count_nonzero(middle_line) == 0:
+                # Horizontal segments
+                horizontal_left = component_mask[middle_y:middle_y + 1, x:x_1_3]
+                horizontal_center = component_mask[middle_y:middle_y + 1, x_1_3:x_2_3]
+                horizontal_right = component_mask[middle_y:middle_y + 1, x_2_3:(x+w)]
+                
+                # Vertical segments
+                vertical_top = component_mask[middle_x:middle_x + 1, y:y_1_3]
+                vertical_center = component_mask[middle_x:middle_x + 1, y_1_3:y_2_3]
+                vertical_bottom = component_mask[middle_x:middle_x + 1, y_2_3:(y+h)]
+
+                # Conditions
+                center_empty = (np.count_nonzero(horizontal_center) == 0) and (np.count_nonzero(vertical_center) <= 100)
+                margins_empty = (np.count_nonzero(horizontal_left) == 0) and (np.count_nonzero(horizontal_right) == 0) and \
+                                (np.count_nonzero(vertical_top) == 0) and (np.count_nonzero(vertical_bottom) == 0)
+
+
+                # Check for white pixels in the centers
+                if center_empty:
                     output_image[labels_im == label] = [0, 255, 0]  # Green color for circles
                     circle_n += 1
                     self.update_board_state(board_state, middle_x, middle_y, grid_bbox, 2)  # O
-                else:
+                
+                elif margins_empty:
                     output_image[labels_im == label] = [0, 0, 255]  # Red color for crosses
                     cross_n += 1
                     self.update_board_state(board_state, middle_x, middle_y, grid_bbox, 1)  # X
 
+                else:
+                    continue
+
         # Add text annotations
         board_present = num_labels > 1
         board_text = f"Board: {int(board_present)}"
-        cross_text = f"Cross:{cross_n}"
-        circle_text = f"Circle:{circle_n}"
-        #cv2.putText(output_image, board_text, (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 4, (255, 255, 255), 6, cv2.LINE_AA)
-        cv2.putText(output_image, cross_text, (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 4, (0, 0, 255), 10, cv2.LINE_AA)
-        cv2.putText(output_image, circle_text, (50, 300), cv2.FONT_HERSHEY_SIMPLEX, 4, (0, 255, 0), 10, cv2.LINE_AA)
+        cross_text = f"Cross: {cross_n}"
+        circle_text = f"Circle: {circle_n}"
+
+        if self.mode_sim:
+            cv2.putText(output_image, board_text, (100, 100), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 0), 3, cv2.LINE_AA)
+            cv2.putText(output_image, cross_text, (740, 100), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 3, cv2.LINE_AA)
+            cv2.putText(output_image, circle_text, (1380, 100), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 3, cv2.LINE_AA)
+            
+        else:
+            cv2.putText(output_image, board_text, (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1, cv2.LINE_AA)
+            cv2.putText(output_image, cross_text, (110, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
+            cv2.putText(output_image, circle_text, (210, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
 
         self.board_state = board_state
         return output_image, num_labels, labels_im, grid_bbox

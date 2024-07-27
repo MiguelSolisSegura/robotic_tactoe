@@ -119,12 +119,6 @@ private:
         const std::shared_ptr<moveit_planning::srv::MakeMove::Request> request,
         std::shared_ptr<moveit_planning::srv::MakeMove::Response> response) {
 
-        if (request->manual) {
-            RCLCPP_INFO(this->get_logger(), "Received request to perform a manual move.");
-        } else {
-            RCLCPP_INFO(this->get_logger(), "Received request to perform an intelligent move.");
-        }
-        
         if (terminal_state_) {
             RCLCPP_ERROR(this->get_logger(), "The game is in a terminal state. Please start a new game.");
             response->success = false;
@@ -132,6 +126,12 @@ private:
             return;
         }
 
+        if (request->manual) {
+            RCLCPP_INFO(this->get_logger(), "Received request to perform a manual move.");
+        } else {
+            RCLCPP_INFO(this->get_logger(), "Received request to perform an intelligent move.");
+        }
+        
         // Create a request for /get_board_state service
         auto get_board_state_request = std::make_shared<moveit_planning::srv::GetBoardState::Request>();
         
@@ -180,6 +180,16 @@ private:
             return;
         }
 
+        // Set flag if the game is in a terminal state
+        if (game_status != "Game in progress") {terminal_state_ = true;}
+
+        if (terminal_state_) {
+            RCLCPP_ERROR(this->get_logger(), "The game is in a terminal state. Please start a new game.");
+            response->success = false;
+            response->message = "The game is in a terminal state. Please start a new game.";
+            return;
+        }
+
         if (request->manual) {best_move = request->command;}
 
         // Create a request for /move_to_coordinates service
@@ -196,7 +206,7 @@ private:
         auto move_to_coordinates_future = move_to_coordinates_client_->async_send_request(move_to_coordinates_request);
         
         // Handle response
-        status = move_to_coordinates_future.wait_for(45s);
+        status = move_to_coordinates_future.wait_for(60s);
         bool service_success;
         if (status == std::future_status::ready) {
             RCLCPP_INFO(this->get_logger(), "Received arm move response.");
@@ -214,8 +224,7 @@ private:
             RCLCPP_INFO(this->get_logger(), "The arm was moved successfully.");
             response->success = true;
             response->message = game_status;
-            // Set flag if the game is in a terminal state
-            if (game_status != "Game in progress") {terminal_state_ = true;}
+            
         } else {
             RCLCPP_ERROR(this->get_logger(), "The arm failed to perform move.");
             response->success = false;
@@ -256,7 +265,7 @@ private:
         // Send request
         auto move_to_coordinates_future = move_to_coordinates_client_->async_send_request(move_to_coordinates_request);
         // Handle response
-        auto status = move_to_coordinates_future.wait_for(30s);
+        auto status = move_to_coordinates_future.wait_for(60s);
         bool service_success;
         if (status == std::future_status::ready) {
             RCLCPP_INFO(this->get_logger(), "Received arm move response for clear request.");
